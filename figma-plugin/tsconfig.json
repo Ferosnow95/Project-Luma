@@ -7,7 +7,7 @@
     "strict": true,
     "esModuleInterop": true,
     "typeRoots": ["./node_modules/@figma"],
-    "outDir": "dist",
+    "noEmit": true,
     "rootDir": "src"
   },
   "include": ["src/code.ts", "src/actions.ts"]

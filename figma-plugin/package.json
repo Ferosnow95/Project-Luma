@@ -4,11 +4,13 @@
   "description": "Luma — summon an AI at your cursor in Figma and do quick tasks by talking to it.",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild src/code.ts --bundle --format=iife --target=es2017 --outfile=dist/code.js",
+    "watch": "esbuild src/code.ts --bundle --format=iife --target=es2017 --outfile=dist/code.js --watch"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.100.0",
+    "esbuild": "^0.23.0",
     "typescript": "^5.5.0"
   }
 }
