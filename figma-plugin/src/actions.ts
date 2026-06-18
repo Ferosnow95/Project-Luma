@@ -1,378 +1,310 @@
-// Luma — action toolbox (runs in Figma's main thread, has access to figma.*)
-//
-// This mirrors the "do something to what the cursor points at" idea from the
-// WPF SlashCursor app. Instead of showing an answer in a bubble, the AI returns
-// a structured LumaAction and we EXECUTE it against the current selection.
-//
-// The structured-action pattern (vs. running raw AI-generated code) keeps the
-// plugin safe and predictable. Add new capabilities by extending LumaAction
-// and the switch in executeAction().
+// Luma — presentation toolbox engine (runs on Figma's main thread, has figma.* access).
+// Every export is a single-click "do the multi-step thing for me" deck action.
+// No AI, no network — deterministic operations on frames and prototype reactions.
 
-export type LumaAction =
-  | { action: "duplicate"; count?: number }
-  | { action: "rename"; name: string }
-  | { action: "setFill"; color: string } // hex, e.g. "#2D7FF9"
-  | { action: "move"; dx: number; dy: number }
-  | { action: "resize"; width?: number; height?: number }
-  | { action: "opacity"; value: number } // 0..1
-  | { action: "autolayout"; direction?: "HORIZONTAL" | "VERTICAL"; spacing?: number }
-  | { action: "delete" }
-  // ---- Organization (deterministic, no AI required) ----
-  | { action: "createSection"; name?: string }
-  | { action: "wrapInFrame"; name?: string }
-  | { action: "arrangeGrid"; columns?: number; gap?: number }
-  | { action: "autoOrganize"; basis?: "name" | "proximity"; gap?: number }
-  | { action: "noop"; message: string }; // info / "didn't understand"
+export type Order = "position" | "name";
 
-export interface SelectionNodeInfo {
-  id: string;
-  name: string;
-  type: string;
-  width?: number;
-  height?: number;
-  x?: number;
-  y?: number;
+export type TransitionKind =
+  | "SMART_ANIMATE"
+  | "DISSOLVE"
+  | "MOVE_IN"
+  | "SLIDE_IN"
+  | "PUSH"
+  | "INSTANT";
+
+export type EasingChoice =
+  | "EASE_IN_AND_OUT"
+  | "EASE_IN"
+  | "EASE_OUT"
+  | "LINEAR"
+  | "GENTLE"
+  | "QUICK"
+  | "BOUNCY"
+  | "SLOW"
+  | "CUSTOM";
+
+export type TriggerKind = "ON_CLICK" | "ARROW_KEYS" | "AUTO_ADVANCE";
+
+export interface ConnectOptions {
+  order: Order;
+  transition: TransitionKind;
+  direction: "LEFT" | "RIGHT" | "TOP" | "BOTTOM";
+  easing: EasingChoice;
+  bezier: { x1: number; y1: number; x2: number; y2: number };
+  duration: number; // milliseconds (from UI)
+  trigger: TriggerKind;
+  autoDelay: number; // seconds, used for AUTO_ADVANCE
+  loop: boolean;
+  back: boolean;
+  flowName: string;
 }
 
-/** Snapshot of what the user is "pointing at" — the Figma equivalent of CursorContext. */
-export interface SelectionContext {
-  count: number;
-  nodes: SelectionNodeInfo[];
+export interface PageNumberOptions {
+  format: "plain" | "fraction" | "labeled";
+  position: "bottom-right" | "bottom-center" | "bottom-left" | "top-right";
+  skipFirst: boolean;
+  order: Order;
 }
 
-export function getSelectionContext(): SelectionContext {
-  const sel = figma.currentPage.selection;
-  return {
-    count: sel.length,
-    nodes: sel.map((n) => {
-      const info: SelectionNodeInfo = { id: n.id, name: n.name, type: n.type };
-      if ("width" in n) info.width = Math.round((n as LayoutMixin).width);
-      if ("height" in n) info.height = Math.round((n as LayoutMixin).height);
-      if ("x" in n) info.x = Math.round((n as LayoutMixin).x);
-      if ("y" in n) info.y = Math.round((n as LayoutMixin).y);
-      return info;
-    }),
-  };
+export interface NormalizeOptions {
+  width: number;
+  height: number;
 }
 
-function hexToRgb(hex: string): RGB {
-  const clean = hex.replace("#", "").trim();
-  const full =
-    clean.length === 3
-      ? clean.split("").map((c) => c + c).join("")
-      : clean.padEnd(6, "0").slice(0, 6);
-  const num = parseInt(full, 16);
-  return {
-    r: ((num >> 16) & 255) / 255,
-    g: ((num >> 8) & 255) / 255,
-    b: (num & 255) / 255,
-  };
+export interface TidyOptions {
+  gap: number;
 }
 
-// ---- Organization helpers (deterministic, no AI) ----
-
-/** Nodes we can sensibly organize (have a position + size on the canvas). */
-type Positioned = SceneNode & LayoutMixin;
-
-function isPositioned(n: SceneNode): n is Positioned {
-  return "x" in n && "y" in n && "width" in n && "height" in n;
+export interface DeckInfo {
+  selectedFrames: number;
+  totalFrames: number;
+  names: string[];
 }
 
-/** Top-left-most origin of a set of nodes, used as the layout anchor. */
-function originOf(nodes: Positioned[]): { x: number; y: number } {
-  return {
-    x: Math.min(...nodes.map((n) => n.x)),
-    y: Math.min(...nodes.map((n) => n.y)),
-  };
+type DeckFrame = FrameNode | ComponentNode | InstanceNode;
+
+const ARROW_RIGHT = 39;
+const ARROW_LEFT = 37;
+const PAGE_NUMBER_MARK = "luma-page-number";
+
+// ---------------------------------------------------------------------------
+// Frame collection + ordering
+// ---------------------------------------------------------------------------
+
+function isDeckFrame(n: SceneNode): n is DeckFrame {
+  return n.type === "FRAME" || n.type === "COMPONENT" || n.type === "INSTANCE";
 }
 
-/**
- * Lay nodes out in a grid (row-major), preserving their reading order
- * (sorted by current y, then x). Rows size to the tallest item in each row.
- */
-function layoutGrid(nodes: Positioned[], columns: number, gap: number): void {
-  const sorted = [...nodes].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  const { x: ox, y: oy } = originOf(sorted);
-  const cols = Math.max(1, columns);
-
-  let row = 0;
-  let cursorX = ox;
-  let rowTop = oy;
-  let rowHeight = 0;
-  sorted.forEach((node, i) => {
-    const col = i % cols;
-    if (col === 0 && i > 0) {
-      rowTop += rowHeight + gap;
-      cursorX = ox;
-      rowHeight = 0;
-      row++;
+function collectFrames(selection: readonly SceneNode[]): DeckFrame[] {
+  const out: DeckFrame[] = [];
+  if (selection.length) {
+    for (const n of selection) {
+      if (n.type === "SECTION") {
+        for (const c of n.children) if (isDeckFrame(c)) out.push(c);
+      } else if (isDeckFrame(n)) {
+        out.push(n);
+      }
     }
-    node.x = cursorX;
-    node.y = rowTop;
-    cursorX += node.width + gap;
-    rowHeight = Math.max(rowHeight, node.height);
+  } else {
+    for (const c of figma.currentPage.children) if (isDeckFrame(c)) out.push(c);
+  }
+  return out;
+}
+
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+// Reading order: group into rows by Y, then left-to-right within a row.
+function orderFrames(frames: DeckFrame[], order: Order): DeckFrame[] {
+  const arr = frames.slice();
+  if (order === "name") {
+    arr.sort((a, b) => naturalCompare(a.name, b.name));
+    return arr;
+  }
+  arr.sort((a, b) => {
+    const rowGap = Math.min(a.height, b.height) * 0.5;
+    if (Math.abs(a.y - b.y) > rowGap) return a.y - b.y;
+    return a.x - b.x;
   });
-  void row;
+  return arr;
 }
 
-/** Group nodes by the first token of their name (split on / - _ : or space). */
-function clusterByName(nodes: Positioned[]): Map<string, Positioned[]> {
-  const groups = new Map<string, Positioned[]>();
-  for (const n of nodes) {
-    const token = (n.name.split(/[\/\-_:\s]/)[0] || "Untitled").trim() || "Untitled";
-    const key = token.toLowerCase();
-    (groups.get(key) ?? groups.set(key, []).get(key)!).push(n);
+// ---------------------------------------------------------------------------
+// Slide Flow — wire prototype reactions (the flagship)
+// ---------------------------------------------------------------------------
+
+function buildEasing(opts: ConnectOptions): Easing {
+  if (opts.easing === "CUSTOM") {
+    return { type: "CUSTOM_CUBIC_BEZIER", easingFunctionCubicBezier: opts.bezier };
   }
-  return groups;
+  return { type: opts.easing } as Easing;
 }
 
-/**
- * Group nodes by spatial proximity: connected components where two nodes are
- * "near" if the gap between their bounding boxes is below a threshold.
- */
-function clusterByProximity(nodes: Positioned[], threshold: number): Positioned[][] {
-  const near = (a: Positioned, b: Positioned): boolean => {
-    const gapX = Math.max(0, Math.max(a.x - (b.x + b.width), b.x - (a.x + a.width)));
-    const gapY = Math.max(0, Math.max(a.y - (b.y + b.height), b.y - (a.y + a.height)));
-    return gapX <= threshold && gapY <= threshold;
+function buildTransition(opts: ConnectOptions): Transition | null {
+  if (opts.transition === "INSTANT") return null;
+  const easing = buildEasing(opts);
+  const duration = Math.max(0, opts.duration) / 1000;
+  if (opts.transition === "SMART_ANIMATE" || opts.transition === "DISSOLVE") {
+    return { type: opts.transition, easing, duration };
+  }
+  return {
+    type: opts.transition, // MOVE_IN | SLIDE_IN | PUSH
+    direction: opts.direction,
+    matchLayers: false,
+    easing,
+    duration,
   };
-  const remaining = new Set(nodes);
-  const clusters: Positioned[][] = [];
-  for (const start of nodes) {
-    if (!remaining.has(start)) continue;
-    const cluster: Positioned[] = [];
-    const queue = [start];
-    remaining.delete(start);
-    while (queue.length) {
-      const cur = queue.pop()!;
-      cluster.push(cur);
-      for (const other of [...remaining]) {
-        if (near(cur, other)) {
-          remaining.delete(other);
-          queue.push(other);
-        }
-      }
-    }
-    clusters.push(cluster);
-  }
-  return clusters;
 }
 
-/** Wrap a set of positioned nodes in a Section sized to their bounds. */
-function sectionFromNodes(nodes: Positioned[], name: string, pad = 40): SectionNode {
-  const section = figma.createSection();
-  section.name = name;
-  const parent = nodes[0].parent ?? figma.currentPage;
-  parent.appendChild(section);
-
-  const minX = Math.min(...nodes.map((n) => n.x));
-  const minY = Math.min(...nodes.map((n) => n.y));
-  const maxX = Math.max(...nodes.map((n) => n.x + n.width));
-  const maxY = Math.max(...nodes.map((n) => n.y + n.height));
-
-  section.x = minX - pad;
-  section.y = minY - pad;
-  section.resizeWithoutConstraints(maxX - minX + pad * 2, maxY - minY + pad * 2);
-  for (const n of nodes) section.appendChild(n);
-  return section;
+function navAction(destinationId: string, transition: Transition | null): Action {
+  return {
+    type: "NODE",
+    destinationId,
+    navigation: "NAVIGATE",
+    transition,
+    preserveScrollPosition: false,
+    resetVideoPosition: false,
+  };
 }
 
+function forwardTrigger(opts: ConnectOptions): Trigger {
+  if (opts.trigger === "ARROW_KEYS") {
+    return { type: "ON_KEY_DOWN", device: "KEYBOARD", keyCodes: [ARROW_RIGHT] };
+  }
+  if (opts.trigger === "AUTO_ADVANCE") {
+    return { type: "AFTER_TIMEOUT", timeout: Math.max(0.1, opts.autoDelay) };
+  }
+  return { type: "ON_CLICK" };
+}
 
-/**
- * Execute a structured action against the current selection.
- * Returns a short human-readable result string for the bubble.
- */
-export async function executeAction(act: LumaAction): Promise<string> {
-  const sel = figma.currentPage.selection;
-
-  if (act.action === "noop") return act.message;
-
-  if (sel.length === 0) {
-    return "Nothing selected — point Luma at an element first.";
+export async function connectSlides(opts: ConnectOptions): Promise<string> {
+  const frames = orderFrames(collectFrames(figma.currentPage.selection), opts.order);
+  if (frames.length < 2) {
+    throw new Error("Select at least 2 frames (or open a page with 2+ frames) to connect.");
   }
 
-  switch (act.action) {
-    case "duplicate": {
-      const count = Math.max(1, Math.min(act.count ?? 1, 50));
-      const created: SceneNode[] = [];
-      for (const node of sel) {
-        let prev = node;
-        for (let i = 0; i < count; i++) {
-          const clone = node.clone();
-          if ("x" in clone && "x" in prev) {
-            (clone as LayoutMixin).x = (prev as LayoutMixin).x + ((prev as LayoutMixin).width ?? 0) + 24;
-            (clone as LayoutMixin).y = (prev as LayoutMixin).y;
-          }
-          node.parent?.appendChild(clone);
-          created.push(clone);
-          prev = clone;
-        }
-      }
-      figma.currentPage.selection = created;
-      return `Duplicated ${sel.length} item(s) ×${count}.`;
+  const transition = buildTransition(opts);
+
+  for (let i = 0; i < frames.length; i++) {
+    const node = frames[i];
+    const reactions: Reaction[] = [];
+    const next = frames[i + 1];
+    const prev = frames[i - 1];
+
+    if (next) {
+      reactions.push({ trigger: forwardTrigger(opts), actions: [navAction(next.id, transition)] });
+    } else if (opts.loop) {
+      reactions.push({ trigger: forwardTrigger(opts), actions: [navAction(frames[0].id, transition)] });
     }
 
-    case "rename": {
-      for (const node of sel) node.name = act.name;
-      return `Renamed ${sel.length} layer(s) to "${act.name}".`;
-    }
-
-    case "setFill": {
-      const rgb = hexToRgb(act.color);
-      let changed = 0;
-      for (const node of sel) {
-        if ("fills" in node) {
-          (node as GeometryMixin).fills = [{ type: "SOLID", color: rgb }];
-          changed++;
-        }
-      }
-      return `Set fill ${act.color} on ${changed} node(s).`;
-    }
-
-    case "move": {
-      for (const node of sel) {
-        if ("x" in node) {
-          (node as LayoutMixin).x += act.dx;
-          (node as LayoutMixin).y += act.dy;
-        }
-      }
-      return `Moved ${sel.length} node(s) by (${act.dx}, ${act.dy}).`;
-    }
-
-    case "resize": {
-      for (const node of sel) {
-        if ("resize" in node) {
-          const w = act.width ?? (node as LayoutMixin).width;
-          const h = act.height ?? (node as LayoutMixin).height;
-          (node as LayoutMixin & { resize(w: number, h: number): void }).resize(w, h);
-        }
-      }
-      return `Resized ${sel.length} node(s).`;
-    }
-
-    case "opacity": {
-      const v = Math.max(0, Math.min(act.value, 1));
-      let changed = 0;
-      for (const node of sel) {
-        if ("opacity" in node) {
-          (node as BlendMixin).opacity = v;
-          changed++;
-        }
-      }
-      return `Set opacity ${Math.round(v * 100)}% on ${changed} node(s).`;
-    }
-
-    case "autolayout": {
-      let changed = 0;
-      for (const node of sel) {
-        if (node.type === "FRAME") {
-          const frame = node as FrameNode;
-          frame.layoutMode = act.direction ?? "VERTICAL";
-          if (act.spacing != null) frame.itemSpacing = act.spacing;
-          changed++;
-        }
-      }
-      return changed
-        ? `Applied auto-layout to ${changed} frame(s).`
-        : "Auto-layout only applies to frames — none selected.";
-    }
-
-    case "delete": {
-      const n = sel.length;
-      for (const node of sel) node.remove();
-      return `Deleted ${n} node(s).`;
-    }
-
-    case "createSection": {
-      const nodes = sel.filter(isPositioned);
-      if (nodes.length === 0) return "Select some frames/screens to put in a section.";
-      const section = sectionFromNodes(nodes, act.name?.trim() || "Section");
-      figma.currentPage.selection = [section];
-      figma.viewport.scrollAndZoomIntoView([section]);
-      return `Created section "${section.name}" with ${nodes.length} item(s).`;
-    }
-
-    case "wrapInFrame": {
-      const nodes = sel.filter(isPositioned);
-      if (nodes.length === 0) return "Select some layers to wrap in a frame.";
-      const minX = Math.min(...nodes.map((n) => n.x));
-      const minY = Math.min(...nodes.map((n) => n.y));
-      const maxX = Math.max(...nodes.map((n) => n.x + n.width));
-      const maxY = Math.max(...nodes.map((n) => n.y + n.height));
-      const frame = figma.createFrame();
-      frame.name = act.name?.trim() || "Frame";
-      frame.x = minX;
-      frame.y = minY;
-      frame.resize(maxX - minX, maxY - minY);
-      const parent = nodes[0].parent ?? figma.currentPage;
-      parent.appendChild(frame);
-      // Reparent, keeping visual position (frame-relative coords).
-      for (const n of nodes) {
-        const absX = n.x;
-        const absY = n.y;
-        frame.appendChild(n);
-        n.x = absX - minX;
-        n.y = absY - minY;
-      }
-      figma.currentPage.selection = [frame];
-      return `Wrapped ${nodes.length} layer(s) in frame "${frame.name}".`;
-    }
-
-    case "arrangeGrid": {
-      const nodes = sel.filter(isPositioned);
-      if (nodes.length < 2) return "Select at least 2 items to arrange.";
-      const cols = act.columns ?? Math.ceil(Math.sqrt(nodes.length));
-      const gap = act.gap ?? 80;
-      layoutGrid(nodes, cols, gap);
-      figma.viewport.scrollAndZoomIntoView(nodes);
-      return `Arranged ${nodes.length} item(s) into a ${cols}-column grid (gap ${gap}).`;
-    }
-
-    case "autoOrganize": {
-      const nodes = sel.filter(isPositioned);
-      if (nodes.length < 2) return "Select at least 2 screens to organize.";
-      const gap = act.gap ?? 80;
-      const basis = act.basis ?? "name";
-
-      let clusters: Positioned[][];
-      if (basis === "proximity") {
-        clusters = clusterByProximity(nodes, 400);
-      } else {
-        // Name-based; fall back to proximity if everything lands in one bucket.
-        const byName = clusterByName(nodes);
-        clusters = [...byName.values()];
-        if (clusters.length <= 1) clusters = clusterByProximity(nodes, 400);
-      }
-
-      // Tidy each cluster into a grid, then box it in a named section.
-      const sections: SectionNode[] = [];
-      clusters.forEach((cluster) => {
-        const cols = Math.ceil(Math.sqrt(cluster.length));
-        layoutGrid(cluster, cols, gap);
-        const label =
-          basis === "name"
-            ? titleCase(firstToken(cluster[0].name))
-            : `Group ${sections.length + 1}`;
-        sections.push(sectionFromNodes(cluster, label));
+    if (opts.back && opts.trigger === "ARROW_KEYS" && prev) {
+      reactions.push({
+        trigger: { type: "ON_KEY_DOWN", device: "KEYBOARD", keyCodes: [ARROW_LEFT] },
+        actions: [navAction(prev.id, transition)],
       });
-
-      // Spread the sections apart so they don't overlap.
-      layoutGrid(sections.filter(isPositioned) as Positioned[], Math.ceil(Math.sqrt(sections.length)), 160);
-      figma.currentPage.selection = sections;
-      figma.viewport.scrollAndZoomIntoView(sections);
-      return `Organized ${nodes.length} screen(s) into ${sections.length} section(s) by ${basis}.`;
     }
 
-    default:
-      return "Unknown action.";
+    await node.setReactionsAsync(reactions);
+  }
+
+  figma.currentPage.flowStartingPoints = [
+    { nodeId: frames[0].id, name: opts.flowName || "Slide Flow" },
+  ];
+
+  const triggerLabel =
+    opts.trigger === "ARROW_KEYS" ? "arrow keys" : opts.trigger === "AUTO_ADVANCE" ? "auto-advance" : "click";
+  return `Connected ${frames.length} slides · ${prettyTransition(opts.transition)} · ${triggerLabel}.`;
+}
+
+function prettyTransition(t: TransitionKind): string {
+  switch (t) {
+    case "SMART_ANIMATE": return "Smart Animate";
+    case "DISSOLVE": return "Dissolve";
+    case "MOVE_IN": return "Move in";
+    case "SLIDE_IN": return "Slide in";
+    case "PUSH": return "Push";
+    case "INSTANT": return "Instant";
   }
 }
 
-function firstToken(name: string): string {
-  return (name.split(/[\/\-_:\s]/)[0] || "Group").trim() || "Group";
+// ---------------------------------------------------------------------------
+// Page numbers
+// ---------------------------------------------------------------------------
+
+function formatNumber(format: PageNumberOptions["format"], n: number, total: number): string {
+  if (format === "fraction") return `${n} / ${total}`;
+  if (format === "labeled") return `Slide ${n}`;
+  return `${n}`;
 }
 
-function titleCase(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function positionLabel(text: TextNode, frame: DeckFrame, position: PageNumberOptions["position"]): void {
+  const margin = 40;
+  const w = frame.width;
+  const h = frame.height;
+  const tw = text.width;
+  const th = text.height;
+  switch (position) {
+    case "bottom-right": text.x = w - tw - margin; text.y = h - th - margin; break;
+    case "bottom-center": text.x = (w - tw) / 2; text.y = h - th - margin; break;
+    case "bottom-left": text.x = margin; text.y = h - th - margin; break;
+    case "top-right": text.x = w - tw - margin; text.y = margin; break;
+  }
 }
 
+function findPageNumber(frame: DeckFrame): TextNode | null {
+  const found = frame.findOne((n) => n.type === "TEXT" && n.getPluginData(PAGE_NUMBER_MARK) === "1");
+  return (found as TextNode) || null;
+}
+
+export async function addPageNumbers(opts: PageNumberOptions): Promise<string> {
+  const frames = orderFrames(collectFrames(figma.currentPage.selection), opts.order);
+  if (!frames.length) throw new Error("No frames found to number.");
+
+  await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+
+  const total = opts.skipFirst ? frames.length - 1 : frames.length;
+  let count = 0;
+
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i];
+    if (opts.skipFirst && i === 0) {
+      const existing = findPageNumber(frame);
+      if (existing) existing.remove();
+      continue;
+    }
+    count++;
+    let text = findPageNumber(frame);
+    if (!text) {
+      text = figma.createText();
+      text.setPluginData(PAGE_NUMBER_MARK, "1");
+      frame.appendChild(text);
+    }
+    text.fontName = { family: "Inter", style: "Regular" };
+    text.fontSize = 24;
+    text.characters = formatNumber(opts.format, count, total);
+    text.fills = [{ type: "SOLID", color: { r: 0.55, g: 0.55, b: 0.6 } }];
+    positionLabel(text, frame, opts.position);
+  }
+
+  return `Numbered ${count} slides.`;
+}
+
+// ---------------------------------------------------------------------------
+// Layout helpers
+// ---------------------------------------------------------------------------
+
+export async function normalizeDeck(opts: NormalizeOptions): Promise<string> {
+  const frames = collectFrames(figma.currentPage.selection);
+  if (!frames.length) throw new Error("Select frames to normalize.");
+  for (const f of frames) f.resizeWithoutConstraints(opts.width, opts.height);
+  return `Resized ${frames.length} frames to ${opts.width}×${opts.height}.`;
+}
+
+export async function tidyDeck(opts: TidyOptions): Promise<string> {
+  const frames = orderFrames(collectFrames(figma.currentPage.selection), "position");
+  if (frames.length < 2) throw new Error("Select 2+ frames to tidy.");
+  const y = Math.min(...frames.map((f) => f.y));
+  let x = frames[0].x;
+  for (const f of frames) {
+    f.x = x;
+    f.y = y;
+    x += f.width + opts.gap;
+  }
+  return `Tidied ${frames.length} slides into a row.`;
+}
+
+// ---------------------------------------------------------------------------
+// Selection info for the UI
+// ---------------------------------------------------------------------------
+
+export function getDeckInfo(): DeckInfo {
+  const selectedFrames = collectFrames(figma.currentPage.selection);
+  const totalFrames = figma.currentPage.children.filter(isDeckFrame).length;
+  const ordered = orderFrames(selectedFrames.length ? selectedFrames : collectFrames([]), "position");
+  return {
+    selectedFrames: selectedFrames.length,
+    totalFrames,
+    names: ordered.slice(0, 40).map((f) => f.name),
+  };
+}

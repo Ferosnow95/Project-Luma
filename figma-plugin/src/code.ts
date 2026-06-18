@@ -1,76 +1,76 @@
-// Luma — main thread (code.js). Has access to figma.* but NO DOM/network.
-// Network + AI provider calls happen in ui.html (the iframe). The two sides
-// talk via postMessage. This mirrors SlashCursor's split:
-//   CursorChatController (orchestration)  ->  code.ts
-//   BubbleWindow + IResponseProvider (UI + network) -> ui.html
+// Luma — plugin main thread. Thin dispatcher: the UI (ui.html) posts a typed
+// message per toolbox action; we run the matching engine function from actions.ts
+// and report the result back. No AI, no network.
 
-import { executeAction, getSelectionContext, LumaAction } from "./actions";
+import {
+  connectSlides,
+  addPageNumbers,
+  normalizeDeck,
+  tidyDeck,
+  getDeckInfo,
+  ConnectOptions,
+  PageNumberOptions,
+  NormalizeOptions,
+  TidyOptions,
+} from "./actions";
 
-// Example commands shown as suggestions in Figma's quick-action parameter bar
-// (Quick actions: Ctrl/Cmd + / → type "Luma" → these appear as you type).
-const SUGGESTIONS = [
-  "organize these screens",
-  "group into a section",
-  "arrange in a grid",
-  "wrap these in a frame",
-  "duplicate this 3 times",
-  "make this blue",
-  "rename to Button/Primary",
-  "opacity 50%",
-  "autolayout vertical 16",
-  "delete",
-];
+figma.showUI(__html__, { width: 380, height: 640, themeColors: true, title: "Luma" });
 
-// Live suggestions for the parameter input ("/"-style palette inside Figma's bar).
-figma.parameters.on("input", ({ query, result }) => {
-  const q = query.trim().toLowerCase();
-  const matches = q ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(q)) : SUGGESTIONS;
-  // Always allow the freeform text too, so any phrasing reaches the AI/mock parser.
-  result.setSuggestions(q && !matches.includes(query) ? [query, ...matches] : matches);
-});
-
-// Fired on every launch (menu, relaunch button, shortcut, or parameter entry).
-figma.on("run", ({ parameters }: RunEvent) => {
-  const prefill = parameters?.query?.trim() || null;
-  launch(prefill);
-});
-
-function launch(prefill: string | null) {
-  // Open as the small collapsed companion pill; the UI expands on click
-  // (and resizes the window via a "resize" message).
-  figma.showUI(__html__, { width: 240, height: 56, themeColors: true, title: "Luma" });
-
-  // Push the current selection ("what the cursor points at") to the UI on open
-  // and whenever it changes — so the AI always has fresh context.
-  pushSelection();
-  figma.on("selectionchange", pushSelection);
-
-  // If the user typed a command in the quick-action bar, prefill + auto-run it.
-  if (prefill) {
-    figma.ui.postMessage({ type: "prefill", query: prefill, autorun: true });
-  }
+function pushSelection(): void {
+  figma.ui.postMessage({ type: "selection", info: getDeckInfo() });
 }
 
+figma.on("selectionchange", pushSelection);
+pushSelection();
 
-function pushSelection() {
-  figma.ui.postMessage({ type: "selection", context: getSelectionContext() });
+interface UIMessage {
+  type: string;
+  options?: unknown;
+  width?: number;
+  height?: number;
 }
 
-
-figma.ui.onmessage = async (msg: { type: string; action?: LumaAction; w?: number; h?: number }) => {
-  if (msg.type === "run-action" && msg.action) {
-    try {
-      const result = await executeAction(msg.action);
-      figma.ui.postMessage({ type: "result", ok: true, message: result });
-      figma.notify(result);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      figma.ui.postMessage({ type: "result", ok: false, message });
-      figma.notify(`Luma error: ${message}`, { error: true });
+figma.ui.onmessage = async (msg: UIMessage) => {
+  try {
+    switch (msg.type) {
+      case "connect-slides": {
+        const result = await connectSlides(msg.options as ConnectOptions);
+        figma.notify(result);
+        figma.ui.postMessage({ type: "done", message: result });
+        break;
+      }
+      case "page-numbers": {
+        const result = await addPageNumbers(msg.options as PageNumberOptions);
+        figma.notify(result);
+        figma.ui.postMessage({ type: "done", message: result });
+        break;
+      }
+      case "normalize": {
+        const result = await normalizeDeck(msg.options as NormalizeOptions);
+        figma.notify(result);
+        figma.ui.postMessage({ type: "done", message: result });
+        break;
+      }
+      case "tidy": {
+        const result = await tidyDeck(msg.options as TidyOptions);
+        figma.notify(result);
+        figma.ui.postMessage({ type: "done", message: result });
+        break;
+      }
+      case "resize": {
+        if (typeof msg.width === "number" && typeof msg.height === "number") {
+          figma.ui.resize(Math.round(msg.width), Math.round(msg.height));
+        }
+        break;
+      }
+      case "close": {
+        figma.closePlugin();
+        break;
+      }
     }
-  } else if (msg.type === "resize" && msg.w && msg.h) {
-    figma.ui.resize(msg.w, msg.h);
-  } else if (msg.type === "close") {
-    figma.closePlugin();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    figma.notify(`Luma: ${message}`, { error: true });
+    figma.ui.postMessage({ type: "error", message });
   }
 };

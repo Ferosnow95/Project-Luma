@@ -1,58 +1,50 @@
-# Luma — Figma plugin
+# Luma — presentation toolbox for Figma
 
-The Figma incarnation of **SlashCursor**: summon an AI at your cursor and do quick
-design tasks by talking to it. Instead of pointing at pixels on screen, you point
-at **selected nodes**; instead of an answer in a bubble, the AI returns a
-**structured action** that the plugin executes on the canvas.
+Luma is a designer's quick-action toolbox for building presentation decks. Each tool
+does a multi-step chore in **one click**. No AI, no network — just deterministic
+operations on your frames and prototype connections.
 
-## Architecture (mirrors the WPF app)
+## Tools
 
-| SlashCursor (WPF)            | Luma (Figma)                                  |
-| ---------------------------- | --------------------------------------------- |
-| `CursorChatController`       | `src/code.ts` (main thread, owns `figma.*`)   |
-| `CursorContext` (screenshot) | `SelectionContext` (selected nodes)           |
-| `BubbleWindow` overlay       | `ui.html` (iframe command bubble)             |
-| `IResponseProvider`          | `mockProvider` / `geminiProvider` in `ui.html`|
-| Answer text                  | `LumaAction` → `executeAction()`              |
+- **Slide Flow** (flagship) — select frames, click once, and Luma wires them in order
+  with prototype reactions. Choose the transition (Smart Animate / Dissolve / Move /
+  Slide / Push), easing (presets, spring presets, or a custom curve), duration, and
+  trigger (on click · arrow keys · auto-advance). Optional loop and arrow-key "back".
+  It also sets the flow's starting point so **Present** mode just works.
+- **Easing Studio** — a draggable cubic-bezier editor with a live preview. The curve
+  you shape becomes the "Custom" easing in Slide Flow.
+- **Page Numbers** — add/update a number on every slide (formats `1` · `1/N` ·
+  `Slide 1`), positionable, skip-cover option. Re-run to refresh.
+- **Layout** — normalize all selected frames to one size, and tidy them into an even
+  left-to-right row.
+- **More** (coming soon) — reorder manager, frame-to-frame morph, table-of-contents.
 
-The plugin runs in two sandboxes that talk via `postMessage`:
+## Architecture
 
-- **`code.ts`** — read selection, mutate nodes. No DOM/network.
-- **`ui.html`** — the bubble UI + AI/network calls.
+| Layer | File | Runs in | Has `figma.*`? |
+|---|---|---|---|
+| Engine | [src/actions.ts](src/actions.ts) | main thread | yes |
+| Dispatcher | [src/code.ts](src/code.ts) | main thread | yes |
+| UI | [ui.html](ui.html) | iframe | no (posts messages) |
+
+The UI posts a typed message per tool (`connect-slides`, `page-numbers`, `normalize`,
+`tidy`); `code.ts` runs the matching engine function and reports the result back.
+
+The flagship uses Figma's prototyping API: `node.setReactionsAsync([{ trigger, actions:
+[{ type: "NODE", navigation: "NAVIGATE", transition: { type: "SMART_ANIMATE", easing,
+duration } }] }])`.
 
 ## Develop
 
 ```powershell
 cd figma-plugin
 npm install
-npm run watch   # esbuild bundles src/*.ts -> dist/code.js on save
-npm run typecheck   # optional: tsc type-check (no emit)
+npm run watch      # esbuild bundles src/code.ts -> dist/code.js (IIFE)
+npm run typecheck  # tsc, no emit
 ```
 
-> The main thread (`code.ts`) is **bundled** into a single `dist/code.js` IIFE
-> with esbuild. Figma's plugin sandbox runs one non-module script and rejects
-> `import`/`export`, so we must bundle rather than emit raw ES modules.
+> **Must bundle with esbuild** (`--format=iife`). Figma's sandbox runs one
+> non-module script; raw `tsc` ES-module output fails at launch with a syntax error.
 
-Then in Figma desktop: **Plugins → Development → Import plugin from manifest…**
-and pick `figma-plugin/manifest.json`.
-
-## Try it (Mock provider, no API key)
-
-Select a layer, open Luma, and type:
-
-- `duplicate this 3 times`
-- `make this blue` / `fill #2D7FF9`
-- `rename to Button/Primary`
-- `opacity 50%`
-- `autolayout vertical 16`
-- `move right 100`
-- `delete`
-
-Switch the provider dropdown to **Gemini** and paste a key to use the real model
-(returns the same structured `LumaAction` JSON).
-
-## Extend the toolbox
-
-Add a case to `LumaAction` and the `switch` in `src/actions.ts`, then teach the
-providers about it (a keyword rule in `mockProvider`, and the action list in the
-Gemini system prompt).
+Then in Figma desktop: **Plugins → Development → Import plugin from manifest…** and
+pick `figma-plugin/manifest.json`.

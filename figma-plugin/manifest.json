@@ -4,28 +4,15 @@
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "ui.html",
-  "editorType": ["figma", "figjam"],
+  "editorType": ["figma"],
   "capabilities": [],
   "enableProposedApi": false,
   "documentAccess": "dynamic-page",
-  "parameters": [
-    {
-      "name": "Command",
-      "key": "query",
-      "description": "Describe what Luma should do (or leave blank to open the bubble)…",
-      "allowFreeform": true,
-      "optional": true
-    }
-  ],
-  "parameterOnly": false,
   "networkAccess": {
-    "allowedDomains": [
-      "https://generativelanguage.googleapis.com",
-      "https://api.openai.com"
-    ],
-    "reasoning": "Calls AI providers (Gemini / OpenAI) to turn a natural-language command into a structured canvas action."
+    "allowedDomains": ["none"],
+    "reasoning": "Luma runs entirely on-canvas with no network calls."
   },
   "relaunchButtons": [
-    { "command": "open", "name": "Ask Luma" }
+    { "command": "open", "name": "Open Luma" }
   ]
 }
