@@ -1,0 +1,14 @@
+{
+  "name": "luma-figma-plugin",
+  "version": "0.1.0",
+  "description": "Luma — summon an AI at your cursor in Figma and do quick tasks by talking to it.",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "typescript": "^5.5.0"
+  }
+}

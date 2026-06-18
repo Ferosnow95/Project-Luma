@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { font-family: Inter, -apple-system, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 12px;
+        color: var(--figma-color-text, #1a1a1a);
+        background: var(--figma-color-bg, #fff);
+      }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .bubble {
+        display: flex; gap: 8px; align-items: center;
+        border: 1px solid var(--figma-color-border, #e6e6e6);
+        border-radius: 10px; padding: 8px 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      }
+      .slash { font-weight: 700; opacity: .5; }
+      input[type="text"] {
+        flex: 1; border: none; outline: none; font-size: 14px;
+        background: transparent; color: inherit;
+      }
+      button {
+        border: none; border-radius: 8px; padding: 7px 12px;
+        font-size: 13px; cursor: pointer;
+        background: var(--figma-color-bg-brand, #0d99ff); color: #fff;
+      }
+      button.secondary {
+        background: transparent; color: var(--figma-color-text, #1a1a1a);
+        border: 1px solid var(--figma-color-border, #e6e6e6);
+      }
+      .meta { font-size: 11px; opacity: .6; margin-top: 8px; }
+      .result { font-size: 12px; margin-top: 8px; min-height: 16px; }
+      .result.err { color: #d8000c; }
+      .keyrow { margin-top: 10px; }
+      .keyrow input { border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 6px; padding: 6px 8px; }
+      .hint { font-size: 11px; opacity: .55; margin-top: 6px; line-height: 1.4; }
+    </style>
+  </head>
+  <body>
+    <div class="bubble">
+      <span class="slash">/</span>
+      <input id="cmd" type="text" placeholder="duplicate this 3 times…" autofocus />
+      <button id="run">Run</button>
+    </div>
+
+    <div class="meta" id="selinfo">No selection.</div>
+    <div class="result" id="result"></div>
+
+    <div class="keyrow row">
+      <select id="provider" class="secondary" style="padding:6px;border-radius:6px;">
+        <option value="mock">Mock (offline)</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <input id="apikey" type="password" placeholder="Gemini API key (optional)" style="flex:1;display:none;" />
+    </div>
+    <div class="hint">
+      Try: “make this blue”, “rename to Button/Primary”, “duplicate 5 times”,
+      “opacity 50%”, “autolayout vertical 16”, “move right 100”, “delete”.
+    </div>
+
+    <script>
+      // ---- IResponseProvider equivalents (run here; iframe has network) ----
+
+      // Mock provider: keyword → structured LumaAction. Zero config, always works.
+      function mockProvider(query) {
+        const q = query.toLowerCase().trim();
+        const num = (re, d) => { const m = q.match(re); return m ? parseInt(m[1], 10) : d; };
+
+        if (/(duplicate|copy|clone)/.test(q))
+          return { action: "duplicate", count: num(/(\d+)/, 1) };
+        if (/delete|remove/.test(q)) return { action: "delete" };
+        if (/rename|name it|call it|name to/.test(q)) {
+          const m = query.match(/(?:to|it|call it)\s+["']?([^"']+)["']?\s*$/i);
+          return { action: "rename", name: m ? m[1].trim() : "Renamed" };
+        }
+        const hex = q.match(/#([0-9a-f]{3,6})/i);
+        const named = { red:"#FF3B30", blue:"#0D99FF", green:"#34C759", black:"#000000",
+                        white:"#FFFFFF", yellow:"#FFCC00", purple:"#AF52DE", orange:"#FF9500" };
+        const namedHit = Object.keys(named).find((c) => q.includes(c));
+        if (/fill|color|colour|make (it|this)/.test(q) && (hex || namedHit))
+          return { action: "setFill", color: hex ? "#" + hex[1] : named[namedHit] };
+        if (/opacity|transparent|fade/.test(q))
+          return { action: "opacity", value: (num(/(\d+)/, 50)) / 100 };
+        if (/auto ?layout|stack/.test(q))
+          return { action: "autolayout",
+                   direction: /horizontal|row/.test(q) ? "HORIZONTAL" : "VERTICAL",
+                   spacing: num(/(\d+)/, 16) };
+        if (/move/.test(q)) {
+          const d = num(/(\d+)/, 50);
+          if (/left/.test(q)) return { action: "move", dx: -d, dy: 0 };
+          if (/up/.test(q)) return { action: "move", dx: 0, dy: -d };
+          if (/down/.test(q)) return { action: "move", dx: 0, dy: d };
+          return { action: "move", dx: d, dy: 0 };
+        }
+        return { action: "noop", message: "Didn't understand — try a command from the hint below." };
+      }
+
+      // Gemini provider: returns structured JSON action. Mirrors GeminiProvider.cs.
+      async function geminiProvider(query, context, apiKey) {
+        const model = "gemini-2.5-flash";
+        const sys =
+          "You convert a designer's request into ONE JSON action for a Figma plugin. " +
+          "Reply with ONLY raw JSON, no markdown. Allowed actions: " +
+          'duplicate{count}, rename{name}, setFill{color(hex)}, move{dx,dy}, ' +
+          "resize{width,height}, opacity{value 0..1}, autolayout{direction:HORIZONTAL|VERTICAL,spacing}, " +
+          "delete{}, noop{message}. Use the current selection context for reference.";
+        const body = {
+          contents: [{ parts: [{ text:
+            sys + "\nSelection: " + JSON.stringify(context) + "\nRequest: " + query }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        };
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          { method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+            body: JSON.stringify(body) }
+        );
+        if (!res.ok) throw new Error("Gemini " + res.status + ": " + (await res.text()).slice(0, 140));
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+        return JSON.parse(text);
+      }
+
+      // ---- UI wiring ----
+      let selectionContext = { count: 0, nodes: [] };
+      const $ = (id) => document.getElementById(id);
+
+      $("provider").addEventListener("change", (e) => {
+        $("apikey").style.display = e.target.value === "gemini" ? "block" : "none";
+      });
+
+      async function run() {
+        const query = $("cmd").value.trim();
+        if (!query) return;
+        setResult("Thinking…", false);
+        try {
+          let action;
+          if ($("provider").value === "gemini") {
+            const key = $("apikey").value.trim();
+            if (!key) throw new Error("Enter a Gemini API key or switch to Mock.");
+            action = await geminiProvider(query, selectionContext, key);
+          } else {
+            action = mockProvider(query);
+          }
+          parent.postMessage({ pluginMessage: { type: "run-action", action } }, "*");
+        } catch (e) {
+          setResult(e.message || String(e), true);
+        }
+      }
+
+      function setResult(text, isErr) {
+        const el = $("result");
+        el.textContent = text;
+        el.className = "result" + (isErr ? " err" : "");
+      }
+
+      $("run").addEventListener("click", run);
+      $("cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+
+      // Messages from the main thread (code.ts).
+      onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "selection") {
+          selectionContext = msg.context;
+          $("selinfo").textContent = msg.context.count === 0
+            ? "No selection."
+            : `${msg.context.count} selected: ` +
+              msg.context.nodes.map((n) => n.name).slice(0, 4).join(", ");
+        } else if (msg.type === "result") {
+          setResult(msg.message, !msg.ok);
+        }
+      };
+    </script>
+  </body>
+</html>

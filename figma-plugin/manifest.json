@@ -1,0 +1,21 @@
+{
+  "name": "Luma",
+  "id": "luma-cursor-ai-figma",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "figjam"],
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://generativelanguage.googleapis.com",
+      "https://api.openai.com"
+    ],
+    "reasoning": "Calls AI providers (Gemini / OpenAI) to turn a natural-language command into a structured canvas action."
+  },
+  "relaunchButtons": [
+    { "command": "open", "name": "Ask Luma" }
+  ]
+}
