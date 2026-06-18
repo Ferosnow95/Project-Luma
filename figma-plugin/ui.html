@@ -5,62 +5,115 @@
     <style>
       :root { font-family: Inter, -apple-system, system-ui, sans-serif; }
       * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
       body {
-        margin: 0; padding: 12px;
         color: var(--figma-color-text, #1a1a1a);
+        background: transparent;
+        overflow: hidden;
+      }
+
+      /* Collapsed companion pill */
+      #collapsed {
+        display: flex; align-items: center; gap: 8px;
+        height: 40px; margin: 6px; padding: 0 12px;
+        border: 1px solid var(--figma-color-border, #e6e6e6);
+        border-radius: 20px;
         background: var(--figma-color-bg, #fff);
+        box-shadow: 0 4px 14px rgba(0,0,0,.12);
+        cursor: pointer; user-select: none;
       }
-      .row { display: flex; gap: 8px; align-items: center; }
-      .bubble {
-        display: flex; gap: 8px; align-items: center;
-        border: 1px solid var(--figma-color-border, #e6e6e6);
-        border-radius: 10px; padding: 8px 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      #collapsed:hover { border-color: var(--figma-color-bg-brand, #0d99ff); }
+      #collapsed .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--figma-color-bg-brand, #0d99ff); }
+      #collapsed .label { font-weight: 600; font-size: 13px; }
+      #collapsed .count { margin-left: auto; font-size: 11px; opacity: .6; }
+
+      /* Expanded panel */
+      #panel { display: none; flex-direction: column; height: 100%; background: var(--figma-color-bg, #fff); }
+      #panel.open { display: flex; }
+
+      .head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 12px; border-bottom: 1px solid var(--figma-color-border, #ececec);
       }
-      .slash { font-weight: 700; opacity: .5; }
-      input[type="text"] {
-        flex: 1; border: none; outline: none; font-size: 14px;
-        background: transparent; color: inherit;
+      .head .title { font-weight: 700; font-size: 13px; }
+      .head .sel {
+        margin-left: auto; font-size: 11px; opacity: .6;
+        max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      button {
-        border: none; border-radius: 8px; padding: 7px 12px;
-        font-size: 13px; cursor: pointer;
-        background: var(--figma-color-bg-brand, #0d99ff); color: #fff;
+      .iconbtn { border: none; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; opacity: .55; padding: 2px 6px; color: inherit; }
+      .iconbtn:hover { opacity: 1; }
+
+      .search {
+        margin: 8px 12px 4px; display: flex; align-items: center; gap: 8px;
+        border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 8px; padding: 7px 10px;
       }
-      button.secondary {
-        background: transparent; color: var(--figma-color-text, #1a1a1a);
-        border: 1px solid var(--figma-color-border, #e6e6e6);
+      .search input { flex: 1; border: none; outline: none; background: transparent; color: inherit; font-size: 13px; }
+      .search .slash { font-weight: 700; opacity: .4; }
+
+      /* Tool list: vertical + scrollable, never grows the window */
+      .tools { flex: 1; overflow-y: auto; padding: 2px 8px 8px; }
+      .cat { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; opacity: .5; margin: 12px 6px 4px; }
+      .tool {
+        display: flex; align-items: center; gap: 10px;
+        width: 100%; text-align: left;
+        padding: 8px 10px; border-radius: 8px;
+        background: transparent; color: inherit; border: none; cursor: pointer;
       }
-      .meta { font-size: 11px; opacity: .6; margin-top: 8px; }
-      .result { font-size: 12px; margin-top: 8px; min-height: 16px; }
+      .tool:hover { background: var(--figma-color-bg-hover, rgba(0,0,0,.05)); }
+      .tool .ticon { width: 24px; height: 24px; flex: none; border-radius: 6px; }
+      .tcol { display: flex; flex-direction: column; min-width: 0; }
+      .tool .tlabel { font-weight: 500; font-size: 13px; }
+      .tool .tdesc { font-size: 11px; opacity: .55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tool .badge {
+        margin-left: auto; font-size: 9px; text-transform: uppercase; letter-spacing: .04em;
+        border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 10px; padding: 1px 6px; opacity: .7;
+      }
+      .tool.soon { opacity: .5; cursor: default; }
+      .tool.soon:hover { background: transparent; }
+
+      /* Inline input under an expandable tool */
+      .inline { display: flex; gap: 6px; padding: 2px 10px 8px 44px; }
+      .inline input { flex: 1; border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 6px; padding: 6px 8px; font-size: 12px; background: transparent; color: inherit; }
+      .inline button { border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; background: var(--figma-color-bg-brand, #0d99ff); color: #fff; }
+
+      .foot { padding: 8px 12px; border-top: 1px solid var(--figma-color-border, #ececec); }
+      .result { font-size: 12px; min-height: 15px; }
       .result.err { color: #d8000c; }
-      .keyrow { margin-top: 10px; }
-      .keyrow input { border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 6px; padding: 6px 8px; }
-      .hint { font-size: 11px; opacity: .55; margin-top: 6px; line-height: 1.4; }
+      .provider { display: flex; gap: 8px; margin-top: 8px; }
+      .provider select, .provider input { border: 1px solid var(--figma-color-border, #e6e6e6); border-radius: 6px; padding: 5px 8px; font-size: 12px; background: transparent; color: inherit; }
+      .provider input { flex: 1; display: none; }
     </style>
   </head>
   <body>
-    <div class="bubble">
-      <span class="slash">/</span>
-      <input id="cmd" type="text" placeholder="duplicate this 3 times…" autofocus />
-      <button id="run">Run</button>
+    <!-- Collapsed companion pill -->
+    <div id="collapsed">
+      <span class="dot"></span>
+      <span class="label">Luma</span>
+      <span class="count" id="count"></span>
     </div>
 
-    <div class="meta" id="selinfo">No selection.</div>
-    <div class="result" id="result"></div>
-
-    <div class="keyrow row">
-      <select id="provider" class="secondary" style="padding:6px;border-radius:6px;">
-        <option value="mock">Mock (offline)</option>
-        <option value="gemini">Gemini</option>
-      </select>
-      <input id="apikey" type="password" placeholder="Gemini API key (optional)" style="flex:1;display:none;" />
-    </div>
-    <div class="hint">
-      Try: “make this blue”, “rename to Button/Primary”, “duplicate 5 times”,
-      “opacity 50%”, “autolayout vertical 16”, “move right 100”, “delete”.<br />
-      Organize: “organize these screens”, “group into a section called Auth”,
-      “arrange in a 4-column grid”, “wrap these in a frame”.
+    <!-- Expanded toolbox -->
+    <div id="panel">
+      <div class="head">
+        <span class="title">Luma</span>
+        <span class="sel" id="sel">No selection</span>
+        <button class="iconbtn" id="collapse-btn" title="Collapse">&minus;</button>
+      </div>
+      <div class="search">
+        <span class="slash">/</span>
+        <input id="search-input" type="text" placeholder="Search tools or describe a task…" />
+      </div>
+      <div class="tools" id="tools"></div>
+      <div class="foot">
+        <div class="result" id="result"></div>
+        <div class="provider">
+          <select id="provider">
+            <option value="mock">Mock (offline)</option>
+            <option value="gemini">Gemini</option>
+          </select>
+          <input id="apikey" type="password" placeholder="Gemini API key" />
+        </div>
+      </div>
     </div>
 
     <script>
@@ -148,16 +201,113 @@
         return JSON.parse(text);
       }
 
-      // ---- UI wiring ----
+      // ---- Toolbox ----
+      const NAMED = { red:"#FF3B30", blue:"#0D99FF", green:"#34C759", black:"#000000",
+                      white:"#FFFFFF", yellow:"#FFCC00", purple:"#AF52DE", orange:"#FF9500",
+                      gray:"#8E8E93", grey:"#8E8E93", pink:"#FF2D95" };
+      function toHex(v) {
+        v = (v || "").trim();
+        if (/^#?[0-9a-f]{3,6}$/i.test(v)) return v[0] === "#" ? v : "#" + v;
+        return NAMED[v.toLowerCase()] || "#0D99FF";
+      }
+
+      const CAT_COLOR = { Organize:"#0D99FF", Layout:"#34C759", Transform:"#AF52DE",
+                          Color:"#FF9500", Text:"#FF3B30", "Coming soon":"#8E8E93" };
+
+      // Every action the companion can do, grouped by category.
+      const TOOLS = [
+        { cat:"Organize", label:"Organize by name", desc:"Cluster screens into sections by name", run:()=>({action:"autoOrganize",basis:"name"}) },
+        { cat:"Organize", label:"Organize by proximity", desc:"Group screens placed near each other", run:()=>({action:"autoOrganize",basis:"proximity"}) },
+        { cat:"Organize", label:"Arrange in grid", desc:"Tidy the selection into a grid", run:()=>({action:"arrangeGrid"}) },
+        { cat:"Organize", label:"Group into section", desc:"Box selected frames in a named section", input:{ placeholder:"Section name (optional)", build:v=>({action:"createSection", name:v||undefined}) } },
+        { cat:"Organize", label:"Wrap in frame", desc:"Wrap the selection in a frame", input:{ placeholder:"Frame name (optional)", build:v=>({action:"wrapInFrame", name:v||undefined}) } },
+        { cat:"Layout", label:"Auto-layout vertical", desc:"Stack with 16 spacing", run:()=>({action:"autolayout",direction:"VERTICAL",spacing:16}) },
+        { cat:"Layout", label:"Auto-layout horizontal", desc:"Row with 16 spacing", run:()=>({action:"autolayout",direction:"HORIZONTAL",spacing:16}) },
+        { cat:"Transform", label:"Duplicate", desc:"Clone the selection", input:{ placeholder:"How many? (default 1)", type:"number", build:v=>({action:"duplicate", count:Math.max(1, parseInt(v||"1",10)||1)}) } },
+        { cat:"Transform", label:"Delete", desc:"Remove the selection", confirm:true, run:()=>({action:"delete"}) },
+        { cat:"Color", label:"Set fill color", desc:"Apply a solid color", input:{ placeholder:"#0D99FF or a name like blue", build:v=>({action:"setFill", color:toHex(v)}) } },
+        { cat:"Color", label:"Set opacity", desc:"Adjust transparency", input:{ placeholder:"Percent, e.g. 50", type:"number", build:v=>({action:"opacity", value:Math.max(0, Math.min(1, (parseInt(v||"100",10)||100)/100))}) } },
+        { cat:"Text", label:"Rename layers", desc:"Set a new name on the selection", input:{ placeholder:"New name", build:v=>({action:"rename", name:v||"Renamed"}) } },
+        { cat:"Coming soon", label:"Remove background", desc:"Knock out image backgrounds", soon:true },
+        { cat:"Coming soon", label:"Image editing", desc:"Crop, adjust, filters", soon:true },
+        { cat:"Coming soon", label:"Connect screens", desc:"Wire prototype flows on click", soon:true },
+      ];
+
       let selectionContext = { count: 0, nodes: [] };
       const $ = (id) => document.getElementById(id);
 
-      $("provider").addEventListener("change", (e) => {
-        $("apikey").style.display = e.target.value === "gemini" ? "block" : "none";
-      });
+      function emit(action) { parent.postMessage({ pluginMessage: { type: "run-action", action } }, "*"); }
+      function setResult(text, isErr) { const el = $("result"); el.textContent = text || ""; el.className = "result" + (isErr ? " err" : ""); }
 
-      async function run() {
-        const query = $("cmd").value.trim();
+      // Render the categorized tool list, honoring the filter text.
+      function renderTools(filter) {
+        const f = (filter || "").trim().toLowerCase();
+        const list = $("tools");
+        list.innerHTML = "";
+        let lastCat = null;
+        const shown = TOOLS.filter((t) => !f || (t.label + " " + t.desc).toLowerCase().includes(f));
+        shown.forEach((t) => {
+          if (t.cat !== lastCat) {
+            lastCat = t.cat;
+            const h = document.createElement("div");
+            h.className = "cat";
+            h.textContent = t.cat;
+            list.appendChild(h);
+          }
+          const btn = document.createElement("button");
+          btn.className = "tool" + (t.soon ? " soon" : "");
+          const icon = document.createElement("span");
+          icon.className = "ticon";
+          icon.style.background = (CAT_COLOR[t.cat] || "#999") + "22";
+          icon.style.border = "1px solid " + (CAT_COLOR[t.cat] || "#999") + "55";
+          const col = document.createElement("span");
+          col.className = "tcol";
+          const lab = document.createElement("span"); lab.className = "tlabel"; lab.textContent = t.label;
+          const des = document.createElement("span"); des.className = "tdesc"; des.textContent = t.desc;
+          col.appendChild(lab); col.appendChild(des);
+          btn.appendChild(icon); btn.appendChild(col);
+          if (t.soon) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "soon"; btn.appendChild(b); }
+          else btn.addEventListener("click", () => onTool(t, btn, lab));
+          list.appendChild(btn);
+        });
+        if (!shown.length) {
+          const d = document.createElement("div");
+          d.className = "cat"; d.style.opacity = ".6";
+          d.textContent = f ? 'No tool matches — press Enter to ask AI' : "No tools.";
+          list.appendChild(d);
+        }
+      }
+
+      // Clicking a tool: run now, confirm (destructive), or reveal an inline input.
+      function onTool(t, btn, lab) {
+        document.querySelectorAll(".inline").forEach((e) => e.remove());
+        if (t.input) {
+          const row = document.createElement("div");
+          row.className = "inline";
+          const inp = document.createElement("input");
+          inp.type = t.input.type || "text";
+          inp.placeholder = t.input.placeholder;
+          const go = document.createElement("button");
+          go.textContent = "Go";
+          const submit = () => { emit(t.input.build(inp.value)); row.remove(); };
+          go.addEventListener("click", submit);
+          inp.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+          row.appendChild(inp); row.appendChild(go);
+          btn.after(row);
+          inp.focus();
+        } else if (t.confirm) {
+          if (btn.dataset.armed) { emit(t.run()); btn.dataset.armed = ""; lab.textContent = t.label; }
+          else {
+            btn.dataset.armed = "1"; lab.textContent = "Click again to confirm";
+            setTimeout(() => { if (btn.dataset.armed) { btn.dataset.armed = ""; lab.textContent = t.label; } }, 2500);
+          }
+        } else {
+          emit(t.run());
+        }
+      }
+
+      // Freeform fallback -> existing providers (mock / gemini).
+      async function askFreeform(query) {
         if (!query) return;
         setResult("Thinking…", false);
         try {
@@ -169,39 +319,54 @@
           } else {
             action = mockProvider(query);
           }
-          parent.postMessage({ pluginMessage: { type: "run-action", action } }, "*");
-        } catch (e) {
-          setResult(e.message || String(e), true);
-        }
+          emit(action);
+        } catch (e) { setResult(e.message || String(e), true); }
       }
 
-      function setResult(text, isErr) {
-        const el = $("result");
-        el.textContent = text;
-        el.className = "result" + (isErr ? " err" : "");
+      // Expand / collapse the companion (resizes the plugin window via main thread).
+      function setOpen(open) {
+        $("panel").classList.toggle("open", open);
+        $("collapsed").style.display = open ? "none" : "flex";
+        parent.postMessage({ pluginMessage: { type: "resize", w: open ? 320 : 240, h: open ? 460 : 56 } }, "*");
+        if (open) setTimeout(() => $("search-input").focus(), 0);
       }
 
-      $("run").addEventListener("click", run);
-      $("cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+      // Controls
+      $("collapsed").addEventListener("click", () => setOpen(true));
+      $("collapse-btn").addEventListener("click", () => setOpen(false));
+      $("provider").addEventListener("change", (e) => { $("apikey").style.display = e.target.value === "gemini" ? "block" : "none"; });
+      $("search-input").addEventListener("input", (e) => renderTools(e.target.value));
+      $("search-input").addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const v = e.target.value.trim();
+        const hasTool = TOOLS.some((t) => !t.soon && (t.label + " " + t.desc).toLowerCase().includes(v.toLowerCase()));
+        if (v && !hasTool) askFreeform(v);
+      });
+
+      function updateSel(ctx) {
+        selectionContext = ctx;
+        $("sel").textContent = ctx.count === 0 ? "No selection"
+          : ctx.count + " selected: " + ctx.nodes.map((n) => n.name).slice(0, 3).join(", ");
+        $("count").textContent = ctx.count === 0 ? "" : ctx.count;
+      }
 
       // Messages from the main thread (code.ts).
       onmessage = (event) => {
         const msg = event.data.pluginMessage;
         if (!msg) return;
         if (msg.type === "selection") {
-          selectionContext = msg.context;
-          $("selinfo").textContent = msg.context.count === 0
-            ? "No selection."
-            : `${msg.context.count} selected: ` +
-              msg.context.nodes.map((n) => n.name).slice(0, 4).join(", ");
+          updateSel(msg.context);
         } else if (msg.type === "prefill") {
-          // Command typed in Figma's quick-action bar — fill it in and run.
-          $("cmd").value = msg.query || "";
-          if (msg.autorun && msg.query) run();
+          setOpen(true);
+          $("search-input").value = msg.query || "";
+          renderTools(msg.query || "");
+          if (msg.autorun && msg.query) askFreeform(msg.query);
         } else if (msg.type === "result") {
           setResult(msg.message, !msg.ok);
         }
       };
+
+      renderTools("");
     </script>
   </body>
 </html>

@@ -36,8 +36,9 @@ figma.on("run", ({ parameters }: RunEvent) => {
 });
 
 function launch(prefill: string | null) {
-  // A compact, focused bubble near the toolbar.
-  figma.showUI(__html__, { width: 380, height: 240, themeColors: true, title: "Luma" });
+  // Open as the small collapsed companion pill; the UI expands on click
+  // (and resizes the window via a "resize" message).
+  figma.showUI(__html__, { width: 240, height: 56, themeColors: true, title: "Luma" });
 
   // Push the current selection ("what the cursor points at") to the UI on open
   // and whenever it changes — so the AI always has fresh context.
@@ -75,8 +76,8 @@ function repositionNearSelection() {
   const { bounds, zoom } = figma.viewport;
   const viewW = bounds.width * zoom;
   const viewH = bounds.height * zoom;
-  const UI_W = 380;
-  const UI_H = 240;
+  const UI_W = 320;
+  const UI_H = 460;
   const GAP = 12;
 
   // Node's top-right corner, in screen px relative to the viewport's top-left.
@@ -96,7 +97,7 @@ function pushSelection() {
 }
 
 
-figma.ui.onmessage = async (msg: { type: string; action?: LumaAction }) => {
+figma.ui.onmessage = async (msg: { type: string; action?: LumaAction; w?: number; h?: number }) => {
   if (msg.type === "run-action" && msg.action) {
     try {
       const result = await executeAction(msg.action);
@@ -107,6 +108,9 @@ figma.ui.onmessage = async (msg: { type: string; action?: LumaAction }) => {
       figma.ui.postMessage({ type: "result", ok: false, message });
       figma.notify(`Luma error: ${message}`, { error: true });
     }
+  } else if (msg.type === "resize" && msg.w && msg.h) {
+    figma.ui.resize(msg.w, msg.h);
+    repositionNearSelection();
   } else if (msg.type === "close") {
     figma.closePlugin();
   }
