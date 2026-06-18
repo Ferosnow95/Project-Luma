@@ -58,7 +58,9 @@
     </div>
     <div class="hint">
       Try: “make this blue”, “rename to Button/Primary”, “duplicate 5 times”,
-      “opacity 50%”, “autolayout vertical 16”, “move right 100”, “delete”.
+      “opacity 50%”, “autolayout vertical 16”, “move right 100”, “delete”.<br />
+      Organize: “organize these screens”, “group into a section called Auth”,
+      “arrange in a 4-column grid”, “wrap these in a frame”.
     </div>
 
     <script>
@@ -72,6 +74,26 @@
         if (/(duplicate|copy|clone)/.test(q))
           return { action: "duplicate", count: num(/(\d+)/, 1) };
         if (/delete|remove/.test(q)) return { action: "delete" };
+
+        // ---- Organization (deterministic, no AI) ----
+        // "organize/tidy/clean up" -> auto-cluster into sections.
+        if (/organi[sz]e|tidy|clean ?up|sort (these|screens)|group (the )?screens/.test(q)) {
+          const basis = /proximity|position|nearby|close/.test(q) ? "proximity" : "name";
+          return { action: "autoOrganize", basis, gap: num(/gap (\d+)/, 80) };
+        }
+        if (/grid|arrange|lay ?out (in|as)/.test(q))
+          return { action: "arrangeGrid",
+                   columns: (q.match(/(\d+)[ -]?(col|column|wide|across)/) || [])[1] | 0 || undefined,
+                   gap: num(/gap (\d+)/, 80) };
+        if (/wrap.*frame|frame (these|them|it)/.test(q)) {
+          const m = query.match(/(?:called|named)\s+["']?([^"']+)["']?\s*$/i);
+          return { action: "wrapInFrame", name: m ? m[1].trim() : undefined };
+        }
+        if (/section/.test(q)) {
+          const m = query.match(/(?:called|named|section)\s+["']?([^"']+)["']?\s*$/i);
+          return { action: "createSection", name: m && m[1].trim().toLowerCase() !== "section" ? m[1].trim() : undefined };
+        }
+
         if (/rename|name it|call it|name to/.test(q)) {
           const m = query.match(/(?:to|it|call it)\s+["']?([^"']+)["']?\s*$/i);
           return { action: "rename", name: m ? m[1].trim() : "Renamed" };
@@ -106,7 +128,9 @@
           "Reply with ONLY raw JSON, no markdown. Allowed actions: " +
           'duplicate{count}, rename{name}, setFill{color(hex)}, move{dx,dy}, ' +
           "resize{width,height}, opacity{value 0..1}, autolayout{direction:HORIZONTAL|VERTICAL,spacing}, " +
-          "delete{}, noop{message}. Use the current selection context for reference.";
+          "createSection{name}, wrapInFrame{name}, arrangeGrid{columns,gap}, " +
+          "autoOrganize{basis:name|proximity,gap}, delete{}, noop{message}. " +
+          "Use the current selection context for reference.";
         const body = {
           contents: [{ parts: [{ text:
             sys + "\nSelection: " + JSON.stringify(context) + "\nRequest: " + query }] }],
