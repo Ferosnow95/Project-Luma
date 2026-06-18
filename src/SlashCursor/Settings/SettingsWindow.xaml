@@ -1,0 +1,163 @@
+<Window x:Class="SlashCursor.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SlashCursor Settings"
+        Width="460"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#FF1E1E1E"
+        Foreground="White"
+        FontSize="13">
+    <Grid Margin="18">
+        <StackPanel>
+
+            <TextBlock Text="Active provider"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <ComboBox x:Name="ProviderBox"
+                      Height="30"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="Google search (browser, free, no key)" Tag="google"/>
+                <ComboBoxItem Content="Gemini (free tier key)" Tag="gemini"/>
+                <ComboBoxItem Content="Ollama (local, free)" Tag="ollama"/>
+                <ComboBoxItem Content="OpenAI (paid key)" Tag="openai"/>
+                <ComboBoxItem Content="Mock (offline test)" Tag="mock"/>
+            </ComboBox>
+            <TextBlock Text="This is what / uses. Google search needs no key and always works."
+                       FontSize="11"
+                       Foreground="#FF9A9A9A"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"/>
+
+            <Border Height="1" Background="#FF3C3C3C" Margin="0,18,0,16"/>
+
+            <TextBlock Text="Gemini API key (free - aistudio.google.com/apikey)"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <PasswordBox x:Name="GeminiKeyBox"
+                         Height="30"
+                         Background="#FF2D2D30"
+                         Foreground="White"
+                         BorderBrush="#FF3C3C3C"
+                         VerticalContentAlignment="Center"
+                         Padding="6,0"/>
+            <TextBlock x:Name="GeminiKeyStatus"
+                       Text=""
+                       FontSize="11"
+                       Foreground="#FF9A9A9A"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"/>
+
+            <TextBlock Text="Gemini model"
+                       FontWeight="Bold"
+                       Margin="0,16,0,6"/>
+            <ComboBox x:Name="GeminiModelBox"
+                      Height="30"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="gemini-2.5-flash (recommended)" Tag="gemini-2.5-flash"/>
+                <ComboBoxItem Content="gemini-2.0-flash" Tag="gemini-2.0-flash"/>
+                <ComboBoxItem Content="gemini-2.5-pro (slower, sharper)" Tag="gemini-2.5-pro"/>
+            </ComboBox>
+
+            <Border Height="1" Background="#FF3C3C3C" Margin="0,18,0,16"/>
+
+            <TextBlock Text="OpenAI API key"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <PasswordBox x:Name="KeyBox"
+                         Height="30"
+                         Background="#FF2D2D30"
+                         Foreground="White"
+                         BorderBrush="#FF3C3C3C"
+                         VerticalContentAlignment="Center"
+                         Padding="6,0"/>
+            <TextBlock x:Name="KeyStatus"
+                       Text=""
+                       FontSize="11"
+                       Foreground="#FF9A9A9A"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"/>
+
+            <TextBlock Text="OpenAI model"
+                       FontWeight="Bold"
+                       Margin="0,16,0,6"/>
+            <ComboBox x:Name="ModelBox"
+                      Height="30"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="gpt-4o-mini (cheap &amp; fast)" Tag="gpt-4o-mini"/>
+                <ComboBoxItem Content="gpt-4o (sharper vision)" Tag="gpt-4o"/>
+            </ComboBox>
+
+            <Border Height="1" Background="#FF3C3C3C" Margin="0,18,0,16"/>
+
+            <TextBlock Text="Ollama (local, free - no key/quota)"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <ComboBox x:Name="OllamaModelBox"
+                      Height="30"
+                      VerticalContentAlignment="Center"
+                      IsEditable="True">
+                <ComboBoxItem Content="llava (small, fast)" Tag="llava"/>
+                <ComboBoxItem Content="llama3.2-vision (sharper)" Tag="llama3.2-vision"/>
+                <ComboBoxItem Content="moondream (tiny)" Tag="moondream"/>
+            </ComboBox>
+            <TextBlock Text="Requires Ollama installed (ollama.com) and the model pulled, e.g. 'ollama pull llava'."
+                       FontSize="11"
+                       Foreground="#FF9A9A9A"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"/>
+
+            <Border Height="1" Background="#FF3C3C3C" Margin="0,18,0,16"/>
+
+            <TextBlock Text="Google search (browser, no key)"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <ComboBox x:Name="GoogleModeBox"
+                      Height="30"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="Google Web" Tag="web"/>
+                <ComboBoxItem Content="Google Images" Tag="images"/>
+            </ComboBox>
+            <TextBlock Text="Opens results in your default browser. The screenshot is also saved so you can drag it into Google Lens for reverse search."
+                       FontSize="11"
+                       Foreground="#FF9A9A9A"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"/>
+
+            <Border Height="1" Background="#FF3C3C3C" Margin="0,18,0,16"/>
+
+            <TextBlock Text="Screenshot context"
+                       FontWeight="Bold"
+                       Margin="0,0,0,6"/>
+            <ComboBox x:Name="CaptureBox"
+                      Height="30"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="Small region (400px)" Tag="400"/>
+                <ComboBoxItem Content="Medium region (800px)" Tag="800"/>
+                <ComboBoxItem Content="Large region (1200px)" Tag="1200"/>
+                <ComboBoxItem Content="Whole screen" Tag="whole"/>
+            </ComboBox>
+
+            <TextBlock x:Name="SaveStatus"
+                       Text=""
+                       FontSize="11"
+                       Foreground="#FF7AC77A"
+                       Margin="0,14,0,0"/>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Margin="0,16,0,0">
+                <Button Content="Close"
+                        Width="90"
+                        Height="32"
+                        Margin="0,0,8,0"
+                        Click="Close_Click"/>
+                <Button Content="Save"
+                        Width="90"
+                        Height="32"
+                        Click="Save_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

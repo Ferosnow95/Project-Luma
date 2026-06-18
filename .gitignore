@@ -1,0 +1,60 @@
+# ---- .NET / VS build output ----
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userprefs
+*_i.c
+*_p.c
+
+# ---- NuGet ----
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ---- MSBuild generated ----
+*.binlog
+*.tlog
+
+# ---- Secrets / local config (never commit API keys) ----
+*.env
+.env*
+appsettings.*.local.json
+secrets.json
+
+# ---- OS noise ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ---- Node (for the future Figma plugin) ----
+node_modules/
+dist/
+*.log
+npm-debug.log*
+yarn-error.log*
