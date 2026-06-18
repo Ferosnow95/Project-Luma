@@ -194,6 +194,10 @@
             ? "No selection."
             : `${msg.context.count} selected: ` +
               msg.context.nodes.map((n) => n.name).slice(0, 4).join(", ");
+        } else if (msg.type === "prefill") {
+          // Command typed in Figma's quick-action bar — fill it in and run.
+          $("cmd").value = msg.query || "";
+          if (msg.autorun && msg.query) run();
         } else if (msg.type === "result") {
           setResult(msg.message, !msg.ok);
         }

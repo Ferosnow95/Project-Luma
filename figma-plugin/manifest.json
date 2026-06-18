@@ -8,6 +8,16 @@
   "capabilities": [],
   "enableProposedApi": false,
   "documentAccess": "dynamic-page",
+  "parameters": [
+    {
+      "name": "Command",
+      "key": "query",
+      "description": "Describe what Luma should do (or leave blank to open the bubble)…",
+      "allowFreeform": true,
+      "optional": true
+    }
+  ],
+  "parameterOnly": false,
   "networkAccess": {
     "allowedDomains": [
       "https://generativelanguage.googleapis.com",

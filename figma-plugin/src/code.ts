@@ -6,16 +6,54 @@
 
 import { executeAction, getSelectionContext, LumaAction } from "./actions";
 
-// A compact, focused bubble near the toolbar.
-figma.showUI(__html__, { width: 380, height: 240, themeColors: true, title: "Luma" });
+// Example commands shown as suggestions in Figma's quick-action parameter bar
+// (Quick actions: Ctrl/Cmd + / → type "Luma" → these appear as you type).
+const SUGGESTIONS = [
+  "organize these screens",
+  "group into a section",
+  "arrange in a grid",
+  "wrap these in a frame",
+  "duplicate this 3 times",
+  "make this blue",
+  "rename to Button/Primary",
+  "opacity 50%",
+  "autolayout vertical 16",
+  "delete",
+];
 
-// Push the current selection ("what the cursor points at") to the UI on open
-// and whenever it changes — so the AI always has fresh context.
+// Live suggestions for the parameter input ("/"-style palette inside Figma's bar).
+figma.parameters.on("input", ({ query, result }) => {
+  const q = query.trim().toLowerCase();
+  const matches = q ? SUGGESTIONS.filter((s) => s.toLowerCase().includes(q)) : SUGGESTIONS;
+  // Always allow the freeform text too, so any phrasing reaches the AI/mock parser.
+  result.setSuggestions(q && !matches.includes(query) ? [query, ...matches] : matches);
+});
+
+// Fired on every launch (menu, relaunch button, shortcut, or parameter entry).
+figma.on("run", ({ parameters }: RunEvent) => {
+  const prefill = parameters?.query?.trim() || null;
+  launch(prefill);
+});
+
+function launch(prefill: string | null) {
+  // A compact, focused bubble near the toolbar.
+  figma.showUI(__html__, { width: 380, height: 240, themeColors: true, title: "Luma" });
+
+  // Push the current selection ("what the cursor points at") to the UI on open
+  // and whenever it changes — so the AI always has fresh context.
+  pushSelection();
+  figma.on("selectionchange", pushSelection);
+
+  // If the user typed a command in the quick-action bar, prefill + auto-run it.
+  if (prefill) {
+    figma.ui.postMessage({ type: "prefill", query: prefill, autorun: true });
+  }
+}
+
 function pushSelection() {
   figma.ui.postMessage({ type: "selection", context: getSelectionContext() });
 }
-pushSelection();
-figma.on("selectionchange", pushSelection);
+
 
 figma.ui.onmessage = async (msg: { type: string; action?: LumaAction }) => {
   if (msg.type === "run-action" && msg.action) {
