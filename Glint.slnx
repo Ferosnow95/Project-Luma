@@ -1,5 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/SlashCursor/SlashCursor.csproj" />
+    <Project Path="src/Glint/Glint.csproj" />
   </Folder>
 </Solution>

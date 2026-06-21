@@ -5,9 +5,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using SlashCursor.Core;
+using Glint.Core;
 
-namespace SlashCursor.Providers;
+namespace Glint.Providers;
 
 /// <summary>
 /// Sends the captured screenshot + the user's question to Google's Gemini API

@@ -1,16 +1,16 @@
 using System;
 using System.IO;
 
-namespace SlashCursor.Core;
+namespace Glint.Core;
 
 /// <summary>
 /// Minimal file logger so we can capture crashes/exceptions even when the app
-/// runs headless from the tray. Writes to %TEMP%\slashcursor.log.
+/// runs headless from the tray. Writes to %TEMP%\Glint.log.
 /// </summary>
 public static class Log
 {
     private static readonly string Path =
-        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "slashcursor.log");
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Glint.log");
 
     private static readonly object Gate = new();
 

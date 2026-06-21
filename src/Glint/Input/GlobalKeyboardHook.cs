@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace SlashCursor.Input;
+namespace Glint.Input;
 
 /// <summary>
 /// System-wide low-level keyboard hook that watches for the "/" key.

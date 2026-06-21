@@ -4,7 +4,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace SlashCursor.Capture;
+namespace Glint.Capture;
 
 /// <summary>
 /// Captures a rectangular region of the screen centered on the cursor and

@@ -1,10 +1,10 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using SlashCursor.Core;
+using Glint.Core;
 using ComboBox = System.Windows.Controls.ComboBox;
 
-namespace SlashCursor.Settings;
+namespace Glint.Settings;
 
 /// <summary>
 /// Lets the user paste their OpenAI API key (stored DPAPI-encrypted), choose
@@ -24,6 +24,8 @@ public partial class SettingsWindow : Window
     private void LoadCurrent()
     {
         var s = SettingsStore.Current;
+
+        SelectByTag(ProviderBox, s.ActiveProvider);
 
         // Gemini: never display the stored key; just indicate its presence.
         var hasGemStored = !string.IsNullOrWhiteSpace(s.GeminiKeyProtected);
@@ -47,11 +49,15 @@ public partial class SettingsWindow : Window
 
         SelectByTag(ModelBox, s.Model);
         LoadOllamaModel(s.OllamaModel);
+        SelectByTag(GoogleModeBox, s.GoogleSearchMode);
         SelectByTag(CaptureBox, s.CaptureWholeScreen ? "whole" : s.CaptureBoxSize.ToString());
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        if (SelectedTag(ProviderBox) is { } activeProvider)
+            SettingsStore.Current.ActiveProvider = activeProvider;
+
         // Store keys only if the user typed one (blank = keep existing).
         var gemTyped = GeminiKeyBox.Password;
         if (!string.IsNullOrWhiteSpace(gemTyped))
@@ -70,6 +76,9 @@ public partial class SettingsWindow : Window
         var ollamaModel = OllamaModelText();
         if (!string.IsNullOrWhiteSpace(ollamaModel))
             SettingsStore.Current.OllamaModel = ollamaModel;
+
+        if (SelectedTag(GoogleModeBox) is { } googleMode)
+            SettingsStore.Current.GoogleSearchMode = googleMode;
 
         if (SelectedTag(CaptureBox) is { } cap)
         {

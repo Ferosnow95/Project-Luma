@@ -1,4 +1,4 @@
-namespace SlashCursor.Core;
+namespace Glint.Core;
 
 /// <summary>
 /// User-configurable settings. The API key is NOT stored here in plain text;

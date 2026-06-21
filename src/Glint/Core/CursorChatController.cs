@@ -1,13 +1,13 @@
 using System;
 using System.Windows;
 using System.Windows.Threading;
-using SlashCursor.Capture;
-using SlashCursor.Input;
-using SlashCursor.Overlay;
-using SlashCursor.Providers;
+using Glint.Capture;
+using Glint.Input;
+using Glint.Overlay;
+using Glint.Providers;
 using Application = System.Windows.Application;
 
-namespace SlashCursor.Core;
+namespace Glint.Core;
 
 /// <summary>
 /// Wires the global "/" trigger to context capture and the bubble UI.

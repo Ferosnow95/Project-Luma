@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SlashCursor.Providers;
+namespace Glint.Providers;
 
 /// <summary>
 /// A no-cost, no-key provider that returns canned responses.

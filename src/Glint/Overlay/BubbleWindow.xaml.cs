@@ -11,9 +11,9 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using SlashCursor.Providers;
+using Glint.Providers;
 
-namespace SlashCursor.Overlay;
+namespace Glint.Overlay;
 
 /// <summary>
 /// A full-screen, click-blocking overlay that hosts the chat bubble. The
@@ -185,7 +185,7 @@ public partial class BubbleWindow : Window
     {
         try
         {
-            int box = SlashCursor.Core.SettingsStore.Current.CaptureBoxSize;
+            int box = Glint.Core.SettingsStore.Current.CaptureBoxSize;
             if (box <= 0) box = 800;
             double half = box / 2.0;
             var topLeft = Layer.PointFromScreen(

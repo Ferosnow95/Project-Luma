@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SlashCursor.Providers;
+namespace Glint.Providers;
 
 /// <summary>
 /// The context captured at the cursor when the user summons the bubble.

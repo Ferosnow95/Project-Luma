@@ -1,73 +1,70 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using SlashCursor.Core;
+using Glint.Core;
 
-namespace SlashCursor.Providers;
+namespace Glint.Providers;
 
 /// <summary>
-/// Sends the captured screenshot + the user's question to a locally-running
-/// Ollama server (vision models like "llava" or "llama3.2-vision").
+/// Sends the captured screenshot + the user's question to OpenAI's
+/// chat completions API (vision-capable models) and returns the answer.
 ///
-/// This needs no API key, no account, and has no quota or region limits — it
-/// runs entirely on the user's machine. Install from https://ollama.com and
-/// pull a vision model, e.g. <c>ollama pull llava</c>.
+/// The API key comes from <see cref="SettingsStore"/> (DPAPI-encrypted on disk,
+/// or the OPENAI_API_KEY environment variable) so it never lives in source.
 /// </summary>
-public sealed class OllamaProvider : IResponseProvider
+public sealed class OpenAiProvider : IResponseProvider
 {
+    private const string Endpoint = "https://api.openai.com/v1/chat/completions";
+
     private static readonly HttpClient Http = new()
     {
-        // Local inference can be slow on CPU; give it room.
-        Timeout = TimeSpan.FromMinutes(5),
+        Timeout = TimeSpan.FromSeconds(60),
     };
 
-    /// <summary>Local vision model, read from settings (e.g. "llava").</summary>
-    public string Model => string.IsNullOrWhiteSpace(SettingsStore.Current.OllamaModel)
-        ? "llava"
-        : SettingsStore.Current.OllamaModel;
+    /// <summary>Vision-capable model id, read from settings (e.g. "gpt-4o-mini").</summary>
+    public string Model => string.IsNullOrWhiteSpace(SettingsStore.Current.Model)
+        ? "gpt-4o-mini"
+        : SettingsStore.Current.Model;
 
-    private static string Endpoint => string.IsNullOrWhiteSpace(SettingsStore.Current.OllamaEndpoint)
-        ? "http://localhost:11434"
-        : SettingsStore.Current.OllamaEndpoint.TrimEnd('/');
-
-    public string Name => $"Ollama ({Model})";
+    public string Name => $"OpenAI ({Model})";
 
     public async Task<ProviderResult> AskAsync(string query, CursorContext context, CancellationToken ct)
     {
+        var apiKey = SettingsStore.GetOpenAiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return ProviderResult.Error(
+                "No OpenAI API key set.\n" +
+                "Open the tray menu \u2192 Settings\u2026 and paste your key.");
+        }
+
         try
         {
-            var url = $"{Endpoint}/api/chat";
             var payload = BuildPayload(query, context);
-
-            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint)
             {
                 Content = new StringContent(payload, Encoding.UTF8, "application/json"),
             };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             using var resp = await Http.SendAsync(req, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);
 
             if (!resp.IsSuccessStatusCode)
-                return ProviderResult.Error($"Ollama error {(int)resp.StatusCode}: {ExtractError(body)}");
+                return ProviderResult.Error($"OpenAI error {(int)resp.StatusCode}: {ExtractError(body)}");
 
             var answer = ExtractAnswer(body);
             return string.IsNullOrWhiteSpace(answer)
-                ? ProviderResult.Error("Ollama returned an empty response.")
+                ? ProviderResult.Error("OpenAI returned an empty response.")
                 : ProviderResult.Ok(answer);
         }
         catch (OperationCanceledException)
         {
             throw;
-        }
-        catch (HttpRequestException)
-        {
-            return ProviderResult.Error(
-                $"Can't reach Ollama at {Endpoint}.\n" +
-                "Install it from ollama.com, then run:  ollama pull " + Model);
         }
         catch (Exception ex)
         {
@@ -77,6 +74,10 @@ public sealed class OllamaProvider : IResponseProvider
 
     private string BuildPayload(string query, CursorContext context)
     {
+        // Build the user message content: the question, optional element text,
+        // and the screenshot (as a base64 data URL) when available.
+        var userContent = new List<object>();
+
         var sb = new StringBuilder();
         sb.Append(query);
         if (!string.IsNullOrWhiteSpace(context.ElementText))
@@ -84,16 +85,22 @@ public sealed class OllamaProvider : IResponseProvider
             sb.Append("\n\nText under the cursor:\n");
             sb.Append(context.ElementText);
         }
+        userContent.Add(new { type = "text", text = sb.ToString() });
 
-        // Ollama takes images as a base64 array on the message (no data: prefix).
-        var images = new List<string>();
         if (context.ScreenshotPng is { Length: > 0 } png)
-            images.Add(Convert.ToBase64String(png));
+        {
+            var dataUrl = "data:image/png;base64," + Convert.ToBase64String(png);
+            userContent.Add(new
+            {
+                type = "image_url",
+                image_url = new { url = dataUrl },
+            });
+        }
 
         var requestBody = new
         {
             model = Model,
-            stream = false,
+            max_tokens = 600,
             messages = new object[]
             {
                 new
@@ -105,12 +112,7 @@ public sealed class OllamaProvider : IResponseProvider
                         "of that screen region plus their question. Answer concisely and " +
                         "specifically about what is shown. If the screenshot is unclear, say so.",
                 },
-                new
-                {
-                    role = "user",
-                    content = sb.ToString(),
-                    images = images.ToArray(),
-                },
+                new { role = "user", content = userContent },
             },
         };
 
@@ -120,12 +122,11 @@ public sealed class OllamaProvider : IResponseProvider
     private static string ExtractAnswer(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("message", out var msg) &&
-            msg.TryGetProperty("content", out var content))
-        {
-            return content.GetString() ?? string.Empty;
-        }
-        return string.Empty;
+        return doc.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString() ?? string.Empty;
     }
 
     private static string ExtractError(string json)
@@ -133,8 +134,11 @@ public sealed class OllamaProvider : IResponseProvider
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("error", out var err))
-                return err.GetString() ?? json;
+            if (doc.RootElement.TryGetProperty("error", out var err) &&
+                err.TryGetProperty("message", out var msg))
+            {
+                return msg.GetString() ?? json;
+            }
         }
         catch
         {

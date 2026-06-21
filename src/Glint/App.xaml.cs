@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows;
 using System.Windows.Forms;
-using SlashCursor.Core;
-using SlashCursor.Providers;
-using SlashCursor.Settings;
+using Glint.Core;
+using Glint.Providers;
+using Glint.Settings;
 using Application = System.Windows.Application;
 
-namespace SlashCursor;
+namespace Glint;
 
 /// <summary>
 /// Interaction logic for App.xaml. Runs headless in the tray.
@@ -22,10 +22,12 @@ public partial class App : Application
     private readonly GoogleProvider _google = new();
     private readonly OpenAiProvider _openAi = new();
     private readonly GeminiProvider _gemini = new();
+    private readonly OllamaProvider _ollama = new();
 
     private ToolStripMenuItem? _mockItem;
     private ToolStripMenuItem? _geminiItem;
     private ToolStripMenuItem? _openAiItem;
+    private ToolStripMenuItem? _ollamaItem;
     private ToolStripMenuItem? _googleItem;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -41,22 +43,18 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Log.Error("Unhandled domain exception", args.ExceptionObject as Exception);
 
-        Log.Info($"SlashCursor starting. Log file: {Log.FilePath}");
+        Log.Info($"Glint starting. Log file: {Log.FilePath}");
         SettingsStore.Load();
 
         // Run headless: closing windows must not exit the app.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // Prefer Gemini (free tier) when a key is available, then OpenAI, else Mock.
-        IResponseProvider initial =
-            SettingsStore.HasGeminiKey() ? _gemini :
-            SettingsStore.HasOpenAiKey() ? _openAi :
-            _mock;
-        _controller = new CursorChatController(initial);
+        // Use the provider the user last selected (persisted in settings).
+        _controller = new CursorChatController(ProviderFromId(SettingsStore.Current.ActiveProvider));
         _controller.Start();
 
         SetupTray();
-        Log.Info("SlashCursor ready. Press / to summon the bubble.");
+        Log.Info("Glint ready. Press / to summon the bubble.");
     }
 
     private void SetupTray()
@@ -65,11 +63,13 @@ public partial class App : Application
 
         _mockItem = new ToolStripMenuItem("Provider: Mock");
         _geminiItem = new ToolStripMenuItem("Provider: Gemini (free)");
+        _ollamaItem = new ToolStripMenuItem("Provider: Ollama (local, free)");
         _openAiItem = new ToolStripMenuItem("Provider: OpenAI");
-        _googleItem = new ToolStripMenuItem("Provider: Google (stub)");
+        _googleItem = new ToolStripMenuItem("Provider: Google (browser)");
 
         _mockItem.Click += (_, _) => SelectProvider(_mock);
         _geminiItem.Click += (_, _) => SelectProvider(_gemini);
+        _ollamaItem.Click += (_, _) => SelectProvider(_ollama);
         _openAiItem.Click += (_, _) => SelectProvider(_openAi);
         _googleItem.Click += (_, _) => SelectProvider(_google);
 
@@ -77,6 +77,7 @@ public partial class App : Application
 
         menu.Items.Add(_mockItem);
         menu.Items.Add(_geminiItem);
+        menu.Items.Add(_ollamaItem);
         menu.Items.Add(_openAiItem);
         menu.Items.Add(_googleItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -87,7 +88,7 @@ public partial class App : Application
         {
             Icon = SystemIcons.Application,
             Visible = true,
-            Text = "SlashCursor \u2014 press / to ask",
+            Text = "Glint \u2014 press / to ask",
             ContextMenuStrip = menu,
         };
         _tray.DoubleClick += (_, _) => OpenSettings();
@@ -98,8 +99,28 @@ public partial class App : Application
     {
         if (_controller is null) return;
         _controller.Provider = provider;
+        SettingsStore.Current.ActiveProvider = IdFromProvider(provider);
+        SettingsStore.Save();
         SyncProviderChecks();
     }
+
+    /// <summary>Maps a persisted provider id to its provider instance.</summary>
+    private IResponseProvider ProviderFromId(string? id) => id switch
+    {
+        "mock" => _mock,
+        "gemini" => _gemini,
+        "ollama" => _ollama,
+        "openai" => _openAi,
+        _ => _google,
+    };
+
+    /// <summary>Maps a provider instance to its persisted id.</summary>
+    private string IdFromProvider(IResponseProvider provider) =>
+        provider == _mock ? "mock" :
+        provider == _gemini ? "gemini" :
+        provider == _ollama ? "ollama" :
+        provider == _openAi ? "openai" :
+        "google";
 
     /// <summary>Ticks the menu item matching the controller's current provider.</summary>
     private void SyncProviderChecks()
@@ -107,6 +128,7 @@ public partial class App : Application
         var p = _controller?.Provider;
         if (_mockItem is not null) _mockItem.Checked = p == _mock;
         if (_geminiItem is not null) _geminiItem.Checked = p == _gemini;
+        if (_ollamaItem is not null) _ollamaItem.Checked = p == _ollama;
         if (_openAiItem is not null) _openAiItem.Checked = p == _openAi;
         if (_googleItem is not null) _googleItem.Checked = p == _google;
     }
@@ -132,17 +154,8 @@ public partial class App : Application
     /// </summary>
     private void OnSettingsSaved()
     {
-        var current = _controller?.Provider;
-        // Only auto-switch away from non-cloud or unconfigured providers.
-        var onPlaceholder = current == _mock || current == _google;
-        var onOpenAiNoKey = current == _openAi && !SettingsStore.HasOpenAiKey();
-
-        if (SettingsStore.HasGeminiKey() && (onPlaceholder || onOpenAiNoKey || current == _openAi))
-            SelectProvider(_gemini);
-        else if (SettingsStore.HasOpenAiKey() && onPlaceholder)
-            SelectProvider(_openAi);
-        else
-            SyncProviderChecks();
+        // The settings window persists ActiveProvider; honor the user's choice.
+        SelectProvider(ProviderFromId(SettingsStore.Current.ActiveProvider));
     }
 
     protected override void OnExit(ExitEventArgs e)

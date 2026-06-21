@@ -4,9 +4,9 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using SlashCursor.Core;
+using Glint.Core;
 
-namespace SlashCursor.Providers;
+namespace Glint.Providers;
 
 /// <summary>
 /// Opens a Google search in the user's default browser. This needs no API key,
@@ -89,7 +89,7 @@ public sealed class GoogleProvider : IResponseProvider
         }
     }
 
-    /// <summary>Writes the screenshot to %TEMP%\SlashCursor\search-*.png; returns the path or null.</summary>
+    /// <summary>Writes the screenshot to %TEMP%\Glint\search-*.png; returns the path or null.</summary>
     private static string? SaveScreenshot(CursorContext context)
     {
         if (context.ScreenshotPng is not { Length: > 0 } png)
@@ -97,7 +97,7 @@ public sealed class GoogleProvider : IResponseProvider
 
         try
         {
-            var dir = Path.Combine(Path.GetTempPath(), "SlashCursor");
+            var dir = Path.Combine(Path.GetTempPath(), "Glint");
             Directory.CreateDirectory(dir);
             var path = Path.Combine(dir, $"search-{DateTime.Now:yyyyMMdd-HHmmss}.png");
             File.WriteAllBytes(path, png);

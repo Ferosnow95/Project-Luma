@@ -4,17 +4,17 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace SlashCursor.Core;
+namespace Glint.Core;
 
 /// <summary>
-/// Loads/saves <see cref="AppSettings"/> to %APPDATA%\SlashCursor\settings.json
+/// Loads/saves <see cref="AppSettings"/> to %APPDATA%\Glint\settings.json
 /// and handles encrypting/decrypting the OpenAI API key with Windows DPAPI
 /// (current-user scope). The decrypted key only ever exists in memory.
 /// </summary>
 public static class SettingsStore
 {
     private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SlashCursor");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Glint");
 
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
 

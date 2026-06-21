@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Automation;
 
-namespace SlashCursor.Input;
+namespace Glint.Input;
 
 /// <summary>
 /// Decides whether the keyboard focus is currently in a text-editing control.
