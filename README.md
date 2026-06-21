@@ -10,6 +10,22 @@ answers your question in place — without ever leaving the app you're in.
 
 ---
 
+## Download
+
+Grab the latest ready-to-run build from the
+**[Releases page](https://github.com/Ferosnow95/Glint/releases/latest)** — no install
+and no .NET required (it's a self-contained Windows build).
+
+1. Download **`Glint-vX.Y.Z-win-x64.exe`** from the latest release.
+2. Double-click to run. On first launch Windows SmartScreen may warn (the exe is
+   unsigned) — click **More info → Run anyway**.
+3. Glint starts in the system tray. Press `/` anywhere to summon it; right-click the
+   tray icon for **Settings** to choose a provider / add an API key.
+
+> Prefer to build from source instead? See [Install & build](#install--build) below.
+
+---
+
 ## What it does
 
 - **Summon anywhere** — A global hotkey (`/`) opens a chat bubble at the cursor,
